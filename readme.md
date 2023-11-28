@@ -1,7 +1,7 @@
 
 ## 简介
 
-中文逆文本正则化 (ITN, Inverse Text Normalization) ，即将文本中的中文数字转为阿拉伯数字。
+中文逆文本正则化 (Chinese ITN, Chinese Inverse Text Normalization) ，即将文本中的中文数字转为阿拉伯数字。
 
 基于正则表达式实现。
 
