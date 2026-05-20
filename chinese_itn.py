@@ -234,8 +234,8 @@ value_num = re.compile(f"十?(零?[一二两三四五六七八九十][十百千�
 consecutive_tens = re.compile(rf'^((?:十[一二三四五六七八九])+)({common_units})?$')
 consecutive_hundreds = re.compile(rf'^((?:[一二三四五六七八九]百零?[一二三四五六七八九])+)({common_units})?$')
 
-# 百分值
-percent_value = re.compile('(?<![一二三四五六七八九])(百分之)[零一二三四五六七八九十百千万]+(点)?(?(2)[零一二三四五六七八九]+)')
+# 百分值 / 千分比
+percent_permille_value = re.compile('(?<![一二三四五六七八九])([百千]分之)[零一二三四五六七八九十百千万]+(点)?(?(2)[零一二三四五六七八九]+)')
 
 # 分数
 fraction_value = re.compile('([零一二三四五六七八九十百千万]+(点)?(?(2)[零一二三四五六七八九]+))分之([零一二三四五六七八九十百千万]+(点)?(?(4)[零一二三四五六七八九]+))')
@@ -365,9 +365,10 @@ def convert_fraction_value(original):
     denominator, numerator = original.split('分之')
     return convert_value_num(numerator) + '/' + convert_value_num(denominator)
 
-def convert_percent_value(original):
-    """转换百分数"""
-    return convert_value_num(original[3:]) + '%'
+def convert_percent_permille_value(original):
+    """转换百分数/千分比"""
+    suffix = '%' if original[0] == '百' else '‰'
+    return convert_value_num(original[3:]) + suffix
 
 def convert_ratio_value(original):
     """转换比值"""
@@ -458,10 +459,10 @@ def replace(original):
             num_type = '数值'
             final = convert_value_num(original)
 
-        # 百分数
-        elif percent_value.fullmatch(original):
-            num_type = '百分之数值'
-            final = convert_percent_value(original)
+        # 百分数 / 千分比
+        elif percent_permille_value.fullmatch(original):
+            num_type = '百分比数值'
+            final = convert_percent_permille_value(original)
 
         # 分数
         elif fraction_value.fullmatch(original):
