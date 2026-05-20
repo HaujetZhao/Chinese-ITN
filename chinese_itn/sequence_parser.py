@@ -1,13 +1,10 @@
+# coding: utf-8
 """
-Tokenizer+Parser 架构的中文数字序列解析器
-
-用于在主库 else 分支中尝试拆分混合数字序列。
+Tokenizer+Parser 架构的中文数字序列解析器 (统一 Lexer 版)
 """
 
 import re
 from dataclasses import dataclass
-from .mappings import common_units
-
 
 # ============================================================
 # Token 定义
@@ -15,46 +12,69 @@ from .mappings import common_units
 
 @dataclass
 class Token:
-    type: str     # 'DIGIT' | 'TEN' | 'HUNDRED' | 'THOUSAND' | 'TEN_THOUSAND' | 'HUNDRED_MILLION' | 'ZERO' | 'DOT'
+    type: str     # 'DIGIT' | 'TEN' | 'HUNDRED' | ...
     value: int    # 对应的数值
     char: str     # 原始字符
-    pos: int      # 在源文本中的位置
+    pos: int      # 在源文本中的起始位置
 
 
 # ============================================================
-# 词法分析器
+# 通用词法分析器 (Lexer)
 # ============================================================
 
-_CHAR_TOKEN_MAP = {
-    '零': ('ZERO', 0),
-    '一': ('DIGIT', 1),  '二': ('DIGIT', 2),  '三': ('DIGIT', 3),
-    '四': ('DIGIT', 4),  '五': ('DIGIT', 5),  '六': ('DIGIT', 6),
-    '七': ('DIGIT', 7),  '八': ('DIGIT', 8),  '九': ('DIGIT', 9),
-    '幺': ('DIGIT', 1),  '两': ('DIGIT', 2),
-    '十': ('TEN', 10),
-    '百': ('HUNDRED', 100),
-    '千': ('THOUSAND', 1000),
-    '万': ('TEN_THOUSAND', 10000),
-    '亿': ('HUNDRED_MILLION', 100000000),
-    '点': ('DOT', 0),
+_TOKEN_RULES = [
+    ('PERCENT_PREFIX', r'百分之|千分之'),
+    ('FRACTION_SEP',   r'分之'),
+    ('RATIO_SEP',      r'比'),
+    ('DOT',            r'点'),
+    ('YEAR_SUF',       r'年'),
+    ('MONTH_SUF',      r'月'),
+    ('DAY_SUF',        r'日|号'),
+    ('MINUTE_SUF',     r'分(?=[零幺一二三四五六七八九十]|秒|$)'), # 防冲突前瞻
+    ('SECOND_SUF',     r'秒'),
+    ('ZERO',           r'零'),
+    ('DIGIT',          r'[一二两三四五六七八九幺]'),
+    ('TEN',            r'十'),
+    ('HUNDRED',        r'百'),
+    ('THOUSAND',       r'千'),
+    ('TEN_THOUSAND',   r'万'),
+    ('HUNDRED_MILLION',r'亿'),
+    ('WHITESPACE',     r'\s+'),
+    ('OTHER',          r'.'),
+]
+
+_lex_regex = re.compile('|'.join(f'(?P<{name}>{pattern})' for name, pattern in _TOKEN_RULES))
+
+_CHAR_VALUE_MAP = {
+    '零': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '幺': 1,
+    '十': 10, '百': 100, '千': 1000, '万': 10000, '亿': 100000000
 }
 
-
 def tokenize(text):
-    """逐字符扫描，生成 Token 列表。遇到不识别的字符则返回 None。"""
+    """通用词法分析，生成 Token 序列。"""
     tokens = []
-    for i, ch in enumerate(text):
-        entry = _CHAR_TOKEN_MAP.get(ch)
-        if entry is None:
-            return None
-        token_type, token_value = entry
-        tokens.append(Token(type=token_type, value=token_value, char=ch, pos=i))
+    for match in _lex_regex.finditer(text):
+        token_type = match.lastgroup
+        token_char = match.group(token_type)
+        token_pos = match.start()
+        
+        # 忽略空白 Token
+        if token_type == 'WHITESPACE':
+            continue
+            
+        token_value = _CHAR_VALUE_MAP.get(token_char, 0)
+        tokens.append(Token(type=token_type, value=token_value, char=token_char, pos=token_pos))
     return tokens
 
 
 # ============================================================
-# 语法分析器
+# 语法分析器 (Parser)
 # ============================================================
+
+# 基础数字 Token 集合
+_BASIC_NUMERIC_TYPES = {
+    'DIGIT', 'TEN', 'HUNDRED', 'THOUSAND', 'TEN_THOUSAND', 'HUNDRED_MILLION', 'ZERO', 'DOT'
+}
 
 def _parse_atomic(tokens, i):
     """从位置 i 解析一个原子数值，返回 (值, 消耗_token数) 或 None"""
@@ -145,15 +165,7 @@ def _parse_atomic(tokens, i):
 
 
 def _build_number(tokens, i):
-    """
-    从位置 i 尝试解析一个完整数值（含累加+倍增），返回 (值, 消耗_token数) 或 None。
-
-    流程：
-      1. _parse_atomic 解析原子值
-      2. 值表达式后跟 万/亿 → 倍增
-      3. 倍增后累加低位（千/百/十/个）
-      4. 千后累加百/十/个
-    """
+    """从位置 i 尝试解析一个完整数值，返回 (值, 消耗_token数) 或 None。"""
     result = _parse_atomic(tokens, i)
     if result is None:
         return None
@@ -161,7 +173,7 @@ def _build_number(tokens, i):
     n = len(tokens)
     j = i + consumed
 
-    # 值表达式后跟 万/亿 → 倍增（必须在累加之前）
+    # 值后跟 万/亿 → 倍增
     if j < n:
         nxt = tokens[j]
         if nxt.type == 'TEN_THOUSAND' and isinstance(value, int) and 0 < value < 10000:
@@ -197,7 +209,7 @@ def _build_number(tokens, i):
             consumed += chunk_con
             j += chunk_con
 
-    # 累加后再检查万/亿（七千九百零三亿 = 7903 * 10^8）
+    # 累加后再倍增
     if j < n:
         nxt = tokens[j]
         if nxt.type == 'TEN_THOUSAND' and isinstance(value, int) and 0 < value < 10000:
@@ -211,32 +223,40 @@ def _build_number(tokens, i):
 
 
 def parse_tokens(tokens):
-    """消耗 Token 流，解析为数字列表。"""
+    """
+    规约 Token 序列，解析为阿拉伯数字列表。
+    防卫：若序列中包含任何非基本数字 Token，则安全退回并返回 None。
+    """
+    if not tokens:
+        return None
+        
+    # 执行基本数字 Token 防卫
+    if not all(t.type in _BASIC_NUMERIC_TYPES for t in tokens):
+        return None
+
     numbers = []
     i = 0
     n = len(tokens)
 
     while i < n:
-        # 先尝试建数（含累加）
         result = _build_number(tokens, i)
         if result is None:
             return None
         value, consumed = result
 
-        # 小数点处理
+        # 小数点规约
         if i + consumed < n and tokens[i + consumed].type == 'DOT':
             dot_idx = i + consumed
-            # 解析小数部分：DOT 后的连续 DIGIT / ZERO
             k = dot_idx + 1
             decimal_digits = []
             while k < n and tokens[k].type in ('DIGIT', 'ZERO'):
                 decimal_digits.append(str(tokens[k].value))
                 k += 1
             if decimal_digits:
-                value = float(f"{value}.{''.join(decimal_digits)}")
+                value = f"{value}.{''.join(decimal_digits)}"
                 consumed = k - i
             else:
-                value = float(f"{value}.")
+                value = f"{value}."
                 consumed += 1
 
         numbers.append(value)
@@ -249,27 +269,15 @@ def parse_tokens(tokens):
 # 对外接口
 # ============================================================
 
-_UNIT_PATTERN = re.compile(rf'({common_units})$')
-
-
-def strip_trailing_chars(text):
-    """去除末尾的已知单位。使用 common_units 做后缀匹配，最长优先。"""
-    m = _UNIT_PATTERN.search(text)
-    if m:
-        return text[:m.start()]
-    return text
-
-
 def parse_sequence(text):
     """
-    尝试用 parser 解析文本，成功返回 ' ' 分隔的数字串，失败返回 None。
+    统一编译接口：尝试用大数 Parser 解析文本，成功返回 ' ' 分隔的数字串，失败返回 None。
     自动剥离末尾单位字符（含映射），解析后还原。
-    注意：不剥离 万/亿（它们是数值乘数，不是物理单位）。
     """
-    from .converters import strip_unit
+    from .utils import strip_unit
     stripped, unit = strip_unit(text)
 
-    # 如果剥离的是 万/亿，不要剥离（它们是数值乘数）
+    # 排除 万/亿 作为物理单位剥离（它们是数值乘数）
     if unit in ('万', '亿'):
         stripped = text
         unit = ''
@@ -278,20 +286,27 @@ def parse_sequence(text):
         return None
 
     tokens = tokenize(stripped)
-    if tokens is None:
-        # tokenize 不识别的字符 → 尝试逐字符从尾部去掉非数字字符
-        end = len(text)
-        while end > 0:
-            tokens = tokenize(text[:end])
-            if tokens is not None:
-                break
-            end -= 1
-        if tokens is None:
-            return None
-        stripped = text[:end]
-        unit = text[end:]
+    if not tokens:
+        return None
 
-    # 显示模式：token 流末尾是 万/亿/万亿 → 作单位处理而非数学乘
+    # tokenize 不识别的字符作为 OTHER 处理。如果末尾被切分成 OTHER Token，
+    # 尝试递归缩减，从末尾剥离 OTHER 以支持不合法的未知单位。
+    # 这与以前在 tokenize 返回 None 时从尾部缩短的逻辑对齐。
+    if tokens[-1].type == 'OTHER':
+        end_idx = len(tokens)
+        while end_idx > 0 and tokens[end_idx - 1].type == 'OTHER':
+            end_idx -= 1
+        
+        # 剥离出 OTHER 作为后缀单位
+        other_tokens = tokens[end_idx:]
+        unit_from_other = "".join(t.char for t in other_tokens)
+        tokens = tokens[:end_idx]
+        unit = unit_from_other + unit
+
+    if not tokens:
+        return None
+
+    # 如果 token 序列末尾是 万/亿，且显示模式判定它们作为物理显示后缀
     if tokens and tokens[-1].type in ('TEN_THOUSAND', 'HUNDRED_MILLION'):
         display_unit = tokens[-1].char
         numbers = parse_tokens(tokens[:-1])

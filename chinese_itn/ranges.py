@@ -42,9 +42,14 @@ def parse_range(text):
     if not stripped_text:
         return None
 
-    # 2. 词法分析
+    # 2. 词法分析与安全防卫
     tokens = tokenize(stripped_text)
-    if tokens is None:
+    if not tokens:
+        return None
+    
+    # 剥离单位后的核心文本必须纯净，只能含有基础数字 Token，绝不能掺杂百分之、分之、比或其它 OTHER 字符
+    _ALLOWED_RANGE_TYPES = {'DIGIT', 'TEN', 'HUNDRED', 'THOUSAND', 'TEN_THOUSAND', 'HUNDRED_MILLION', 'ZERO'}
+    if not all(t.type in _ALLOWED_RANGE_TYPES for t in tokens):
         return None
 
     # 3. 寻找所有的 DIGIT 连续片段

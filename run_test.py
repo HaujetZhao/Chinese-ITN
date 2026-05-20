@@ -3,21 +3,25 @@
 简单的测试脚本：基于 test_cases.txt 测试 chinese_itn.py
 """
 
-import sys
-import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+from pathlib import Path
 
 from chinese_itn import chinese_to_num
+
+# 路径定义
+_test_cases_path = Path('test_cases.txt')
+_correct_path = Path('test_cases_correct.txt')
+_wrong_path = Path('test_cases_wrong.txt')
+
 
 def run_test():
     """运行测试"""
     print("=" * 60)
     print("chinese_itn 测试")
     print("=" * 60)
-    
+
     # 读取测试用例
     test_cases = []
-    with open('test_cases.txt', 'r', encoding='utf-8') as f:
+    with open(_test_cases_path, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith('#'):
@@ -55,17 +59,17 @@ def run_test():
             print(f"  ... 还有 {len(wrong) - 20} 个")
     
     # 保存到文件
-    with open('test_cases_correct.txt', 'w', encoding='utf-8') as f:
+    with open(_correct_path, 'w', encoding='utf-8') as f:
         f.write("# 测试通过的用例\n# 格式: 输入 -> 期望输出\n\n")
         for input_text, expected in correct:
             f.write(f"{input_text} -> {expected}\n")
-    
-    with open('test_cases_wrong.txt', 'w', encoding='utf-8') as f:
+
+    with open(_wrong_path, 'w', encoding='utf-8') as f:
         f.write("# 测试未通过的用例\n# 格式: 输入 -> 期望输出 (当前: 实际输出)\n\n")
         for input_text, expected, result in wrong:
             f.write(f"{input_text} -> {expected} (当前: {result})\n")
     
-    print(f"\n结果已保存到 test_cases_correct.txt 和 test_cases_wrong.txt")
+    print(f"\n结果已保存到 {_correct_path} 和 {_wrong_path}")
     print("=" * 60)
     
     return len(correct), len(wrong)

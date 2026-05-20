@@ -1,21 +1,35 @@
+# coding: utf-8
 """
-配置和映射表
+配置和映射表 (数据解耦重构版)
 """
 
+from pathlib import Path
+import json
 import re
 
-# 单位映射：中文单位 -> 映射后的单位（None表示保留原样）
-unit_mapping = {
-    '个': None, '只': None, '分': None, '万': None, '亿': None, '秒': None, '年': None,
-    '月': None, '日': None, '天': None, '时': None, '钟': None, '人': None, '层': None,
-    '楼': None, '倍': None, '块': None, '次': None,
-    '克': 'g', '千克': 'kg',
-    '米': '米', '千米': '千米', '千米每小时': 'km/h',
-}
+# 定位静态资源 JSON 文件路径
+_current_dir = Path(__file__).resolve().parent
+_units_path = _current_dir / 'resources' / 'units.json'
+_idioms_path = _current_dir / 'resources' / 'idioms.json'
+
+# 动态加载物理单位映射
+try:
+    with open(_units_path, 'r', encoding='utf-8') as _f:
+        unit_mapping = json.load(_f)
+except Exception as e:
+    # 防御性回滚兜底
+    unit_mapping = {}
+
+# 动态加载成语黑名单
+try:
+    with open(_idioms_path, 'r', encoding='utf-8') as _f:
+        idioms = json.load(_f)
+except Exception as e:
+    idioms = []
 
 # 生成单位正则（按长度从长到短排序，确保先匹配长的）
 _sorted_units = sorted(unit_mapping.keys(), key=len, reverse=True)
-common_units = '|'.join(f'{u}' for u in _sorted_units)
+common_units = '|'.join(f'{re.escape(u)}' for u in _sorted_units)
 
 # 中文数字映射表
 num_mapper = {
@@ -31,19 +45,6 @@ value_mapper = {
     '六': 6,  '七': 7,  '八': 8,  '九': 9,  "十": 10,  "百": 100,
     "千": 1000,  "万": 10000,  "亿": 100000000,
 }
-
-# 成语和习语黑名单
-idioms = '''
-正经八百  五零二落 五零四散
-五十步笑百步 乌七八糟 污七八糟 四百四病 思绪万千
-十有八九 十之八九 三十而立 三十六策 三十六计 三十六行
-三五成群 三百六十行 三六九等
-七老八十 七零八落 七零八碎 七七八八 乱七八遭 乱七八糟 略知一二 零零星星 零七八碎
-九九归一 二三其德 二三其意 无银三百两 八九不离十
-百分之百 年三十 烂七八糟 一点一滴 路易十六 九三学社 五四运动 入木三分 三十六计
-九九八十一 三七二十一
-十二五 十三五 十四五 十五五 十六五 十七五 十八五
-'''.split()
 
 # 模糊表达黑名单（包含"几"的表达不转换）
 fuzzy_regex = re.compile(r'几')
