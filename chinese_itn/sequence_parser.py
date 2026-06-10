@@ -76,6 +76,30 @@ _BASIC_NUMERIC_TYPES = {
     'DIGIT', 'TEN', 'HUNDRED', 'THOUSAND', 'TEN_THOUSAND', 'HUNDRED_MILLION', 'ZERO', 'DOT'
 }
 
+# 单位 Token 类型（十百千万），用于省略尾随单位推断
+_UNIT_TYPES = frozenset({'TEN', 'HUNDRED', 'THOUSAND', 'TEN_THOUSAND'})
+
+def _infer_omitted_unit_scale(tokens, j, n, chunk_con):
+    """推断省略尾随单位的数字应乘的量级。
+
+    例如"一千八"中的"八"省略了"百"，应乘以 10；
+    "一万二千五"中的"五"省略了"百"，应乘以 100。
+    返回量级系数，或 None 表示无法推断。
+    """
+    if chunk_con != 1:
+        return None
+    if tokens[j].type != 'DIGIT':
+        return None
+    if j == 0:
+        return None
+    prev = tokens[j - 1]
+    if prev.type not in _UNIT_TYPES:
+        return None
+    if j + 1 < n and tokens[j + 1].type != 'DOT':
+        return None
+    return prev.value // 10
+
+
 def _parse_atomic(tokens, i):
     """从位置 i 解析一个原子数值，返回 (值, 消耗_token数) 或 None"""
     n = len(tokens)
@@ -205,6 +229,12 @@ def _build_number(tokens, i):
             chunk_val, chunk_con = chunk
             if chunk_val >= limit:
                 break
+
+            # 省略尾随单位推断（如 一千八 → 1800，一万二千五 → 12500）
+            scale = _infer_omitted_unit_scale(tokens, j, n, chunk_con)
+            if scale is not None:
+                chunk_val = chunk_val * scale
+
             value += chunk_val
             consumed += chunk_con
             j += chunk_con
