@@ -3,6 +3,8 @@
 主替换逻辑和入口函数
 """
 
+import re
+
 from .mappings import idioms, fuzzy_regex, value_mapper
 
 _DIGIT_CHARS = {k for k, v in value_mapper.items() if v <= 9}
@@ -16,6 +18,11 @@ from .ranges import is_range_expression, convert_range_expression
 # ============================================================
 # 辅助工具
 # ============================================================
+
+# 「万」+ 单个数字字：作费率术语（万三=万分之三）或词（万一）时不转换；
+# 仅当「万」前无数字或单位字时才视为术语，否则（一万三、九万一）按数字处理
+_WAN_TERM = re.compile(r'(?<![一二两三四五六七八九零幺十百千万亿])[百千万][一二三四五六七八九]')
+
 
 def _all_numeric(tokens):
     """检查所有 Token 是否为基础数值类型"""
@@ -245,6 +252,9 @@ def replace(match):
         final = original
 
     elif fuzzy_regex.search(original):
+        final = original
+
+    elif _WAN_TERM.search(original):
         final = original
 
     elif (_UNIT_CHARS.issuperset(original)
