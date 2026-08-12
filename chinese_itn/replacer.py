@@ -262,6 +262,11 @@ def replace(match):
           and not any(c in _DIGIT_CHARS for c in original)):
         final = original
 
+    elif original.startswith('点'):
+        # 表达式以"点"开头 → 是动词"点"(点击/点名/点水), 不是小数点
+        # 小数点必须位于整数部分之后, 不可能作为数值表达式首字符
+        final = original
+
     else:
         # 提取正负号
         sign_prefix = ""
