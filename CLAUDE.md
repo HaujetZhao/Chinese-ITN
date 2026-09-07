@@ -39,7 +39,9 @@ python run_test.py
 | `chinese_tn/` | TN 核心包（ITN 的反向） |
 | `chinese_tn/__init__.py` | 导出 `num_to_chinese` |
 | `chinese_tn/numbers.py` | 核心数值转中文（整数分节、小数、逐位读） |
-| `chinese_tn/replacer.py` | 扫描正则 + 类别分发 + `num_to_chinese()` 入口 |
+| `chinese_tn/tables.py` | 纯数据表（货币、公制单位、号码上下文词、车牌省份字） |
+| `chinese_tn/categories.py` | 类别表：18 个 (名称, 正则, 处理函数) 三元组 |
+| `chinese_tn/replacer.py` | 薄引擎：合成类别表为单条正则 + 单趟分发 + `num_to_chinese()` 入口 |
 | `run_test.py` | 测试运行器，依次跑 `test_cases.txt`（ITN）与 `test_cases_tn.txt`（TN） |
 | `test_cases.txt` | 测试用例，格式 `输入 -> 期望输出` |
 
@@ -110,13 +112,20 @@ __init__.py (对外接口)
 ```
 numbers.py (整数分节转换 / 小数 / 逐位读，无依赖)
     ↑
-replacer.py (扫描正则 + 类别分发 + 入口)
+tables.py (纯数据：货币、公制单位、号码上下文词、车牌省份字)
+    ↑
+categories.py (类别表：18 个 (名称, 正则, 处理函数) 三元组)
+    ↑
+replacer.py (薄引擎：合成正则 + 单趟分发 + 入口)
     ↑
 __init__.py (导出 num_to_chinese)
 ```
 
-- 候选片段优先级：日期 > 时间 > 百分/千分 > 分数 > 比值 > 数值
+核心抽象是**类别**：一个类别 = (名称, 局部正则, 处理函数) 三元组，自包含。引擎把类别表合成一条命名组交替正则做单趟扫描，按 `lastgroup` 分发；表序即优先级（同一位置按交替顺序取首个匹配）。歧义符号裁决表（`-` `/` `:` 的多义消解顺序）写在 categories.py 文件头。
+
+- 候选片段优先级：斜杠/ISO日期 > 中文日期 > 时间 > 百分/千分 > 分数 > 比值 > 温度 > 货币 > 电话 > 车牌 > 型号 > 号码上下文 > 千分位 > 科学计数 > 公制单位 > 范围 > 数值
 - 时间正则要求小时 ≤23、分/秒两位 ≤59，不满足自然落入比值（1:3、25:70）
-- 数值末位判定：前导零或长度 ≥11 的纯整数串逐位读（11 位为手机号长度），其余按数值读
+- 读法三分：数值读（`int_to_chinese`/`decimal_to_chinese`）、逐位「一」（`digitwise`）、逐位「幺」（`digitwise(s, one='幺')`，仅号码语境）
+- 数值末位判定：前导零、≥14 位、或 11 位且 1 开头（手机号）逐位读，其余按数值读
 - 标准书面读法，全用「二」不用「两」
-- 新增转换类别：在 `replacer.py` 的 `pattern` 优先级序列中加入命名组，并注册 `_HANDLERS` 一项
+- 新增转换类别：在 `categories.py` 的 `CATEGORIES` 表中按优先级插入一个三元组即可，引擎不改

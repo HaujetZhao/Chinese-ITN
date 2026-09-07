@@ -64,6 +64,6 @@ def decimal_to_chinese(s):
     return sign + int_to_chinese(int(int_part)) + '点' + ''.join(_DIGITS[int(c)] for c in frac_part)
 
 
-def digitwise(digits):
-    """纯数字串逐位转中文：'0421' -> 零四二一"""
-    return ''.join(_DIGITS[int(c)] for c in digits)
+def digitwise(digits, one='一'):
+    """纯数字串逐位转中文：'0421' -> 零四二一；号码语境 1 读「幺」"""
+    return ''.join(one if c == '1' else _DIGITS[int(c)] for c in digits)
