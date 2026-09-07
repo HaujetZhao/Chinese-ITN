@@ -68,7 +68,7 @@ def _convert_ratio(text):
 
 
 def _convert_number(text):
-    body, unit = re.fullmatch(r'(-?\d+(?:\.\d+)?)(万亿|万|亿)?', text).groups()
+    body, unit = re.fullmatch(rf'({_NUM})(万亿|万|亿)?', text).groups()
     if '.' in body:
         # 带小数时不折算单位：20.1万 -> 二十点一万
         return decimal_to_chinese(body) + (unit or '')
