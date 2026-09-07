@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 中文逆文本正则化 (Chinese ITN)，将语音识别结果中的中文数字转为阿拉伯数字。纯 Python 实现，无外部依赖，仅使用 `re` 标准库。
 
+除 ITN 外，本库还包含反向的 TN（`chinese_tn`）：将文本中的阿拉伯数字转为中文读法。
+
 ## 核心命令
 
 ```powershell
@@ -14,6 +16,9 @@ python run_test.py
 
 # 快速测试单条转换
 python -c "from chinese_itn import chinese_to_num; print(chinese_to_num('一万两千三百'))"
+
+# 快速测试单条 TN 转换
+python -c "from chinese_tn import num_to_chinese; print(num_to_chinese('2025年10月3日 12:30'))"
 
 # 添加新测试用例后验证（编辑 test_cases.txt 再运行）
 python run_test.py
@@ -31,7 +36,11 @@ python run_test.py
 | `chinese_itn/sequence_parser.py` | 词法分析 (Lexer) 与大数序列解析器 (Parser) |
 | `chinese_itn/ranges.py` | 范围表达式转换 |
 | `chinese_itn/replacer.py` | 语法树规约管线 (Parser Pipeline) + `chinese_to_num()` 入口 |
-| `run_test.py` | 测试运行器，读取 `test_cases.txt` 逐条比对 |
+| `chinese_tn/` | TN 核心包（ITN 的反向） |
+| `chinese_tn/__init__.py` | 导出 `num_to_chinese` |
+| `chinese_tn/numbers.py` | 核心数值转中文（整数分节、小数、逐位读） |
+| `chinese_tn/replacer.py` | 扫描正则 + 类别分发 + `num_to_chinese()` 入口 |
+| `run_test.py` | 测试运行器，依次跑 `test_cases.txt`（ITN）与 `test_cases_tn.txt`（TN） |
 | `test_cases.txt` | 测试用例，格式 `输入 -> 期望输出` |
 
 ## 架构概览
@@ -93,3 +102,21 @@ __init__.py (对外接口)
 - 优先级：成语/习语 > 模糊表达 > 百分比 > 分数 > 比值 > 时间 > 日期 > 范围表达式 > 数值解析 > 降级未匹配
 - 所有规约器签名统一为 `(tokens, original)`，使用 `for` 循环遍历规约器链，`for...else` 处理全不匹配的降级
 - 新增规约器时：①定义 `try_reduce_xxx(tokens, original)` 返回字符串或 `None`  ②在 `replacer.py` 的管线列表中添加一行即可
+
+## chinese_tn 架构
+
+依赖链：
+
+```
+numbers.py (整数分节转换 / 小数 / 逐位读，无依赖)
+    ↑
+replacer.py (扫描正则 + 类别分发 + 入口)
+    ↑
+__init__.py (导出 num_to_chinese)
+```
+
+- 候选片段优先级：日期 > 时间 > 百分/千分 > 分数 > 比值 > 数值
+- 时间正则要求小时 ≤23、分/秒两位 ≤59，不满足自然落入比值（1:3、25:70）
+- 数值末位判定：前导零或长度 ≥11 的纯整数串逐位读（11 位为手机号长度），其余按数值读
+- 标准书面读法，全用「二」不用「两」
+- 新增转换类别：在 `replacer.py` 的 `pattern` 优先级序列中加入命名组，并注册 `_HANDLERS` 一项

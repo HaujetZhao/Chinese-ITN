@@ -5,6 +5,8 @@
 
 基于正则表达式实现。
 
+本库同时提供反向的文本正则化 (TN)：将阿拉伯数字转为中文读法，适用于 TTS 前端等场景。
+
 ## 用法示例
 
 ```python
@@ -12,6 +14,17 @@ from chinese_itn import chinese_to_num
 
 text = '你生日那天我会送你九百九十九朵玫瑰'
 result = chinese_to_num(text)
+
+print(result)
+```
+
+TN 用法：
+
+```python
+from chinese_tn import num_to_chinese
+
+text = '明天有62%的概率降雨，会议定在14:30开始'
+result = num_to_chinese(text)
 
 print(result)
 ```
