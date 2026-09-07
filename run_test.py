@@ -6,6 +6,7 @@
 from pathlib import Path
 
 from chinese_itn import chinese_to_num
+from chinese_tn import num_to_chinese
 
 
 def run_suite(title, convert, cases_name, correct_name, wrong_name):
@@ -63,4 +64,9 @@ if __name__ == "__main__":
     run_suite(
         "chinese_itn 测试", chinese_to_num,
         'test_cases.txt', 'test_cases_correct.txt', 'test_cases_wrong.txt',
+    )
+    print()
+    run_suite(
+        "chinese_tn 测试", num_to_chinese,
+        'test_cases_tn.txt', 'test_cases_tn_correct.txt', 'test_cases_tn_wrong.txt',
     )
